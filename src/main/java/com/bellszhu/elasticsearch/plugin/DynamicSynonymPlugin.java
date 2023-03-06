@@ -22,8 +22,14 @@ public class DynamicSynonymPlugin extends Plugin implements AnalysisPlugin {
     @Override
     public Map<String, AnalysisProvider<TokenFilterFactory>> getTokenFilters() {
         Map<String, AnalysisProvider<TokenFilterFactory>> extra = new HashMap<>();
-        extra.put("dynamic_synonym", requiresAnalysisSettings(DynamicSynonymTokenFilterFactory::new));
-        extra.put("dynamic_synonym_graph", requiresAnalysisSettings(DynamicSynonymGraphTokenFilterFactory::new));
+//        extra.put("dynamic_synonym", requiresAnalysisSettings(DynamicSynonymTokenFilterFactory::new));
+//        extra.put("dynamic_synonym_graph", requiresAnalysisSettings(DynamicSynonymGraphTokenFilterFactory::new));
+
+        extra.put("dynamic_synonym", requiresAnalysisSettings(DynamicSynonymGraphTokenFilterFactory::getInstance));//基于一个前提：相同location的filter，属性完全相同，如interval、lenient
+
+//        Exception e = new Exception("this is a log call instance");
+//        e.printStackTrace();
+
         return extra;
     }
 }

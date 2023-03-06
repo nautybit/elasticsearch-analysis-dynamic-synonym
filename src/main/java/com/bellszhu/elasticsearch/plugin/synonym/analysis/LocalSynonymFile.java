@@ -60,10 +60,15 @@ public class LocalSynonymFile implements SynonymFile {
     }
 
     @Override
-    public SynonymMap reloadSynonymMap() {
+    public SynonymMap reloadSynonymMap(Reader reader) {
         try {
             logger.debug("start reload local synonym from {}.", synonymFilePath);
-            Reader rulesReader = getReader();
+            Reader rulesReader;
+            if(reader!=null) {
+                rulesReader = reader;
+            }else {
+                rulesReader = getReader();
+            }
             SynonymMap.Builder parser = RemoteSynonymFile.getSynonymParser(
                     rulesReader, format, expand, lenient, analyzer);
             return parser.build();

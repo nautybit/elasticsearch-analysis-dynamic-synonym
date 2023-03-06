@@ -12,7 +12,7 @@ import org.apache.lucene.analysis.synonym.SynonymMap;
  */
 public interface SynonymFile {
 
-    SynonymMap reloadSynonymMap();
+    SynonymMap reloadSynonymMap(Reader reader);
 
     boolean isNeedReloadSynonymMap();
 

@@ -20,6 +20,8 @@ package com.bellszhu.elasticsearch.plugin.synonym.analysis;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.synonym.SynonymMap;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
@@ -108,8 +110,11 @@ import org.apache.lucene.util.fst.FST;
 
 public final class DynamicSynonymFilter extends AbsSynonymFilter {
 
+    private static final Logger logger = LogManager.getLogger("dynamic-synonym");
+
     private static final String TYPE_SYNONYM = "SYNONYM";
     private final boolean ignoreCase;
+    private final boolean ignoreOffset;
     private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
     private final PositionIncrementAttribute posIncrAtt = addAttribute(PositionIncrementAttribute.class);
     private final PositionLengthAttribute posLenAtt = addAttribute(PositionLengthAttribute.class);
@@ -171,9 +176,10 @@ public final class DynamicSynonymFilter extends AbsSynonymFilter {
      *                   when you create the {@link SynonymMap}
      */
     DynamicSynonymFilter(TokenStream input, SynonymMap synonyms,
-                         boolean ignoreCase) {
+                         boolean ignoreCase,boolean ignoreOffset) {
         super(input);
         this.ignoreCase = ignoreCase;
+        this.ignoreOffset = ignoreOffset;
         update(synonyms);
     }
 
@@ -440,7 +446,12 @@ public final class DynamicSynonymFilter extends AbsSynonymFilter {
                     if (endOffset == -1) {
                         endOffset = input.endOffset;
                     }
-                    offsetAtt.setOffset(input.startOffset, endOffset);
+//                    offsetAtt.setOffset(input.startOffset, endOffset);
+                    if(!ignoreOffset){
+                        offsetAtt.setOffset(input.startOffset, endOffset);
+                    }else{
+                        logger.debug("dynamic synonym offset ignored");
+                    }
                     posIncrAtt.setPositionIncrement(posIncr);
                     posLenAtt.setPositionLength(outputs.getLastPosLength());
                     if (outputs.count == 0) {
@@ -472,7 +483,12 @@ public final class DynamicSynonymFilter extends AbsSynonymFilter {
                     }
                     clearAttributes();
                     // Keep offset from last input token:
-                    offsetAtt.setOffset(lastStartOffset, lastEndOffset);
+//                    offsetAtt.setOffset(lastStartOffset, lastEndOffset);
+                    if(!this.ignoreOffset){
+                        offsetAtt.setOffset(lastStartOffset, lastEndOffset);
+                    }else{
+                        logger.debug("set offset ignored");
+                    }
                     termAtt.copyBuffer(output.chars, output.offset,
                             output.length);
                     typeAtt.setType(TYPE_SYNONYM);

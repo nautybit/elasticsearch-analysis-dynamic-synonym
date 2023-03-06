@@ -87,11 +87,15 @@ public class RemoteSynonymFile implements SynonymFile {
     }
 
     @Override
-    public SynonymMap reloadSynonymMap() {
+    public SynonymMap reloadSynonymMap(Reader reader) {
         Reader rulesReader = null;
         try {
-            logger.debug("start reload remote synonym from {}.", location);
-            rulesReader = getReader();
+            logger.info("start reload remote synonym from {}.", location);
+            if(reader!=null) {
+                rulesReader = reader;
+            }else {
+                rulesReader = getReader();
+            }
             SynonymMap.Builder parser;
 
             parser = getSynonymParser(rulesReader, format, expand, lenient, analyzer);

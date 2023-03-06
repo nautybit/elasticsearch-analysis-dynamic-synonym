@@ -1,33 +1,26 @@
 package com.bellszhu.elasticsearch.plugin.synonym.analysis;
 
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
-
+import org.apache.commons.io.IOUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.synonym.SynonymMap;
-import org.elasticsearch.common.logging.DeprecationCategory;
-import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.IndexSettings;
-import org.elasticsearch.index.analysis.AbstractTokenFilterFactory;
-import org.elasticsearch.index.analysis.AnalysisMode;
-import org.elasticsearch.index.analysis.CharFilterFactory;
-import org.elasticsearch.index.analysis.CustomAnalyzer;
-import org.elasticsearch.index.analysis.TokenFilterFactory;
-import org.elasticsearch.index.analysis.TokenizerFactory;
+import org.elasticsearch.index.analysis.*;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 /**
  * @author bellszhu
@@ -53,10 +46,41 @@ public class DynamicSynonymTokenFilterFactory extends
     private final boolean lenient;
     private final String format;
     private final int interval;
+    private final boolean ignoreOffset;
     protected SynonymMap synonymMap;
-    protected Map<AbsSynonymFilter, Integer> dynamicSynonymFilters = new WeakHashMap<>();
+    protected Map<AbsSynonymFilter, SynonymFile> dynamicSynonymFilters = new WeakHashMap<>();
     protected final Environment environment;
     protected final AnalysisMode analysisMode;
+    protected String initReaderStr;
+
+    private static ConcurrentMap<String,DynamicSynonymTokenFilterFactory> instanceMap = new ConcurrentHashMap<>();
+
+    public synchronized static DynamicSynonymTokenFilterFactory getInstance(
+            IndexSettings indexSettings,
+            Environment env,
+            String name,
+            Settings settings
+    ) throws IOException {
+
+        String location = settings.get("synonyms_path");
+        if (location == null) {
+            throw new IllegalArgumentException(
+                    "dynamic synonym requires `synonyms_path` to be configured");
+        }
+
+        DynamicSynonymTokenFilterFactory instance = instanceMap.get(location);
+        if( instance != null ){
+            return instance;
+        }
+        instance = new DynamicSynonymTokenFilterFactory(
+                indexSettings,
+                env,
+                name,
+                settings
+        );
+        instanceMap.put(location,instance);
+        return instance;
+    }
 
     public DynamicSynonymTokenFilterFactory(
             IndexSettings indexSettings,
@@ -78,9 +102,24 @@ public class DynamicSynonymTokenFilterFactory extends
         this.expand = settings.getAsBoolean("expand", true);
         this.lenient = settings.getAsBoolean("lenient", false);
         this.format = settings.get("format", "");
+        this.ignoreOffset = settings.getAsBoolean("ignore_offset", true);
         boolean updateable = settings.getAsBoolean("updateable", false);
         this.analysisMode = updateable ? AnalysisMode.SEARCH_TIME : AnalysisMode.ALL;
         this.environment = env;
+
+        SynonymFile synonymFile = new RemoteSynonymFile(environment, null, expand, lenient,  format, location);
+        try {
+            logger.info("init synonym from {}.", location);
+            Reader initReader = synonymFile.getReader();
+            initReaderStr = IOUtils.toString(initReader);
+        } catch (Exception e) {
+            logger.error("init synonym {} error!", location, e);
+            throw new IllegalArgumentException("could not init synonym", e);
+        }
+//
+//        Exception e = new Exception("create instance of "+location);
+//        e.printStackTrace();
+
     }
 
     @Override
@@ -102,7 +141,8 @@ public class DynamicSynonymTokenFilterFactory extends
             Function<String, TokenFilterFactory> allFilters
     ) {
         final Analyzer analyzer = buildSynonymAnalyzer(tokenizer, charFilters, previousTokenFilters, allFilters);
-        synonymMap = buildSynonyms(analyzer);
+        SynonymFile synonymFile = getSynonymFile(analyzer);
+        synonymMap = buildSynonyms(synonymFile);
         final String name = name();
         return new TokenFilterFactory() {
             @Override
@@ -116,8 +156,9 @@ public class DynamicSynonymTokenFilterFactory extends
                 if (synonymMap.fst == null) {
                     return tokenStream;
                 }
-                DynamicSynonymFilter dynamicSynonymFilter = new DynamicSynonymFilter(tokenStream, synonymMap, false);
-                dynamicSynonymFilters.put(dynamicSynonymFilter, 1);
+//                DynamicSynonymFilter dynamicSynonymFilter = new DynamicSynonymFilter(tokenStream, synonymMap, false);
+                DynamicSynonymFilter dynamicSynonymFilter = new DynamicSynonymFilter(tokenStream, synonymMap, false,ignoreOffset);
+                dynamicSynonymFilters.put(dynamicSynonymFilter, synonymFile);
 
                 return dynamicSynonymFilter;
             }
@@ -150,9 +191,10 @@ public class DynamicSynonymTokenFilterFactory extends
         );
     }
 
-    SynonymMap buildSynonyms(Analyzer analyzer) {
+    SynonymMap buildSynonyms(SynonymFile synonymFile) {
         try {
-            return getSynonymFile(analyzer).reloadSynonymMap();
+            Reader initReader = new StringReader(initReaderStr);
+            return synonymFile.reloadSynonymMap(initReader);
         } catch (Exception e) {
             logger.error("failed to build synonyms", e);
             throw new IllegalArgumentException("failed to build synonyms", e);
@@ -160,6 +202,9 @@ public class DynamicSynonymTokenFilterFactory extends
     }
 
     SynonymFile getSynonymFile(Analyzer analyzer) {
+//        Exception ex = new Exception("rewrite instance of "+location);
+//        ex.printStackTrace();
+        logger.debug("rewrite instance of "+location);
         try {
             SynonymFile synonymFile;
             if (location.startsWith("http://") || location.startsWith("https://")) {
@@ -186,15 +231,27 @@ public class DynamicSynonymTokenFilterFactory extends
 
         Monitor(SynonymFile synonymFile) {
             this.synonymFile = synonymFile;
+            logger.debug("create Monitor of "+location);
         }
 
         @Override
         public void run() {
             if (synonymFile.isNeedReloadSynonymMap()) {
-                synonymMap = synonymFile.reloadSynonymMap();
-                for (AbsSynonymFilter dynamicSynonymFilter : dynamicSynonymFilters.keySet()) {
-                    dynamicSynonymFilter.update(synonymMap);
-                    logger.debug("success reload synonym");
+                Reader monitorReader;
+                try {
+                    monitorReader = synonymFile.getReader();
+                    initReaderStr = IOUtils.toString(monitorReader);
+                    //meaningless
+                    for (Map.Entry<AbsSynonymFilter,SynonymFile> entry : dynamicSynonymFilters.entrySet()) {
+                        AbsSynonymFilter dynamicSynonymFilter = entry.getKey();
+                        SynonymFile file = entry.getValue();
+                        SynonymMap map = file.reloadSynonymMap(new StringReader(initReaderStr));
+                        dynamicSynonymFilter.update(map);
+                        logger.debug("success reload synonym");
+                    }
+                } catch (Exception e) {
+                    logger.error("reload remote synonym {} error!", location, e);
+                    throw new IllegalArgumentException("could not reload remote synonyms file to build synonyms", e);
                 }
             }
         }
