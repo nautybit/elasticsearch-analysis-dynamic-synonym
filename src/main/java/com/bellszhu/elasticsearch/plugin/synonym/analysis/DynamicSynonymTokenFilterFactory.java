@@ -241,13 +241,13 @@ public class DynamicSynonymTokenFilterFactory extends
                 try {
                     monitorReader = synonymFile.getReader();
                     initReaderStr = IOUtils.toString(monitorReader);
+                    logger.info("success reload synonym");
                     //meaningless
                     for (Map.Entry<AbsSynonymFilter,SynonymFile> entry : dynamicSynonymFilters.entrySet()) {
                         AbsSynonymFilter dynamicSynonymFilter = entry.getKey();
                         SynonymFile file = entry.getValue();
                         SynonymMap map = file.reloadSynonymMap(new StringReader(initReaderStr));
                         dynamicSynonymFilter.update(map);
-                        logger.debug("success reload synonym");
                     }
                 } catch (Exception e) {
                     logger.error("reload remote synonym {} error!", location, e);

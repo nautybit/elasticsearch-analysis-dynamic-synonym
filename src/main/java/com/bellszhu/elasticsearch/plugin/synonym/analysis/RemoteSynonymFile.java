@@ -90,10 +90,10 @@ public class RemoteSynonymFile implements SynonymFile {
     public SynonymMap reloadSynonymMap(Reader reader) {
         Reader rulesReader = null;
         try {
-            logger.info("start reload remote synonym from {}.", location);
             if(reader!=null) {
                 rulesReader = reader;
             }else {
+                logger.warn("start reload remote synonym from {}.", location);
                 rulesReader = getReader();
             }
             SynonymMap.Builder parser;
