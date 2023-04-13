@@ -158,7 +158,7 @@ public class DynamicSynonymTokenFilterFactory extends
                 }
 //                DynamicSynonymFilter dynamicSynonymFilter = new DynamicSynonymFilter(tokenStream, synonymMap, false);
                 DynamicSynonymFilter dynamicSynonymFilter = new DynamicSynonymFilter(tokenStream, synonymMap, false,ignoreOffset);
-                dynamicSynonymFilters.put(dynamicSynonymFilter, synonymFile);
+//                dynamicSynonymFilters.put(dynamicSynonymFilter, synonymFile);
 
                 return dynamicSynonymFilter;
             }
@@ -241,14 +241,14 @@ public class DynamicSynonymTokenFilterFactory extends
                 try {
                     monitorReader = synonymFile.getReader();
                     initReaderStr = IOUtils.toString(monitorReader);
-                    logger.info("success reload synonym");
+                    logger.info("success reload synonym of "+location);
                     //meaningless
-                    for (Map.Entry<AbsSynonymFilter,SynonymFile> entry : dynamicSynonymFilters.entrySet()) {
-                        AbsSynonymFilter dynamicSynonymFilter = entry.getKey();
-                        SynonymFile file = entry.getValue();
-                        SynonymMap map = file.reloadSynonymMap(new StringReader(initReaderStr));
-                        dynamicSynonymFilter.update(map);
-                    }
+//                    for (Map.Entry<AbsSynonymFilter,SynonymFile> entry : dynamicSynonymFilters.entrySet()) {
+//                        AbsSynonymFilter dynamicSynonymFilter = entry.getKey();
+//                        SynonymFile file = entry.getValue();
+//                        SynonymMap map = file.reloadSynonymMap(new StringReader(initReaderStr));
+//                        dynamicSynonymFilter.update(map);
+//                    }
                 } catch (Exception e) {
                     logger.error("reload remote synonym {} error!", location, e);
                     throw new IllegalArgumentException("could not reload remote synonyms file to build synonyms", e);

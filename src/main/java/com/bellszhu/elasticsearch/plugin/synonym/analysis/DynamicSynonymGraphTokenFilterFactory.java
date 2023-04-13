@@ -83,7 +83,7 @@ public class DynamicSynonymGraphTokenFilterFactory extends DynamicSynonymTokenFi
                 }
                 DynamicSynonymGraphFilter dynamicSynonymGraphFilter = new DynamicSynonymGraphFilter(
                         tokenStream, synonymMap, false);
-                dynamicSynonymFilters.put(dynamicSynonymGraphFilter, synonymFile);
+//                dynamicSynonymFilters.put(dynamicSynonymGraphFilter, synonymFile);
                 return dynamicSynonymGraphFilter;
             }
 
